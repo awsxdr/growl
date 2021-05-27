@@ -7,14 +7,20 @@
 @inject ISessionStorageService SessionStorage
 @inject GameService GameService
 @inject IJSRuntime JsRuntime
+@inject SessionService SessionService;
+
+@if (SessionId is None)
+{
+    return;
+}
 
 <h3>Game @GameCode</h3>
 
 <h3>Player name: <span class="player-name"></span> <button class="btn btn-link"><span class="oi oi-pencil" onclick="showPlayerNameModal()"></span></button></h3>
-
+<h2>@(SessionId is Some<Guid> v ? v.Value : Guid.Empty)</h2>
 <ul class="list-group">
     <li class="list-group-item font-weight-bold">Players</li>
-    @foreach (var player in GameService.GetPlayers(GameCode))
+    @foreach (var player in _gameRunner.GetPlayers())
     {
         <li class="list-group-item">@player</li>
     }
@@ -46,16 +52,24 @@
     [Parameter]
     public string GameCode { get; set; }
 
+    private GameRunner _gameRunner;
+
+    public Option<Guid> SessionId { get; set; } = Option.None<Guid>();
+
     private PlayerNameModel playerNameModel = new();
 
     protected override void OnInitialized()
     {
         base.OnInitialized();
 
-        GameService.OnGameStateUpdated += async (gameCode, state) =>
+        _gameRunner = GameService.GetGame(GameCode) switch
         {
-            if (gameCode != GameCode) return;
+            Some<GameRunner> r => r.Value,
+            _ => throw new Exception("Game hasn't been started")
+        };
 
+        _gameRunner.OnGameStateUpdated += async state =>
+        {
             await InvokeAsync(StateHasChanged);
         };
     }
@@ -65,6 +79,19 @@
         await base.OnAfterRenderAsync(firstRender);
 
         await JsRuntime.InvokeVoidAsync("applyPlayerNameToNodes");
+
+        if (SessionId is None)
+        {
+            var sessionId = await SessionStorage.GetItemAsync<Guid?>("sessionId");
+            if (sessionId == null)
+            {
+                sessionId = SessionService.GetOrInitSessionId();
+                await SessionStorage.SetItemAsync("sessionId", sessionId);
+            }
+
+            SessionId = Option.Some(sessionId.Value);
+            StateHasChanged();
+        }
     }
 
     private async Task SetPlayerName()
@@ -78,13 +105,13 @@
     [JSInvokable]
     private void ReplacePlayerInGame(string playerName, string previousPlayerName)
     {
-        if (GameService.HasPlayer(GameCode, previousPlayerName))
+        if (_gameRunner.HasPlayer(previousPlayerName))
         {
 
         }
         else
         {
-            switch(GameService.AddPlayer(GameCode, playerName))
+            switch(_gameRunner.AddPlayer(SessionId is Some<Guid> s ? s.Value : throw new Exception("Session ID not found"), playerName))
             {
                 case Failure<TooManyPlayersError> _: throw new Exception("Too many players already in game");
             };

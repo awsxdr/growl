@@ -25,6 +25,7 @@ namespace Growl
             services.AddServerSideBlazor();
             services.AddSingleton<GameService>();
             services.AddBlazoredSessionStorage();
+            services.AddTransient<SessionService>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
