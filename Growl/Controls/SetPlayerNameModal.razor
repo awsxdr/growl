@@ -1,0 +1,45 @@
+﻿@using Blazored.SessionStorage
+@inject ISessionStorageService SessionStorage
+
+<div class="modal fade" id="staticBackdrop" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Enter your name</h5>
+            </div>
+            <EditForm Model="@playerNameModel" OnValidSubmit="SetPlayerName">
+                <div class="modal-body">
+                    <DataAnnotationsValidator/>
+                    <ValidationSummary/>
+
+                    <label for="name">Display name</label>
+                    <InputText @bind-Value="playerNameModel.Name" class="form-control"/>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Ok</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    private PlayerNameModel playerNameModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+
+        playerNameModel.Name = await SessionStorage.GetItemAsStringAsync("playerName");
+    }
+
+    private async Task SetPlayerName()
+    {
+        await SessionStorage.SetItemAsync("playerName", playerNameModel.Name);
+    }
+
+    private class PlayerNameModel
+    {
+        public string Name { get; set; }
+    }
+}

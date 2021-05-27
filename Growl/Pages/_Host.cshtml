@@ -1,0 +1,74 @@
+﻿@page "/"
+@namespace Growl.Pages
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Growl</title>
+    <base href="~/" />
+    <link rel="stylesheet" href="css/bootstrap/bootstrap.min.css" />
+    <link href="css/site.css" rel="stylesheet" />
+    <link href="Growl.styles.css" rel="stylesheet" />
+</head>
+<body>
+    <component type="typeof(App)" render-mode="ServerPrerendered" />
+
+    <div id="blazor-error-ui">
+        <environment include="Staging,Production">
+            An error has occurred. This application may no longer respond until reloaded.
+        </environment>
+        <environment include="Development">
+            An unhandled exception has occurred. See browser dev tools for details.
+        </environment>
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">🗙</a>
+    </div>
+
+<script src="_framework/blazor.server.js"></script>
+
+<script>
+    var playerName;
+
+    function showPlayerNameModal() {
+        document.querySelector('#playerNameModal').style.display = 'inherit';
+    }
+
+    function hidePlayerNameModal() {
+        document.querySelector('#playerNameModal').style.display = 'none';
+    }
+
+    function setPlayerName(name) {
+        const oldName = playerName;
+        playerName = name;
+        sessionStorage.setItem('playerName', name);
+
+        DotNet.invokeMethodAsync('Growl', 'ReplacePlayerInGame', playerName, oldName);
+    }
+
+    function applyPlayerNameToNodes() {
+        document.querySelectorAll('.player-name').forEach(playerNameNode =>  {
+                playerNameNode.innerText = playerName;
+            }
+        );
+
+        document.querySelectorAll('#playerName').forEach(playerNameNode => {
+            playerNameNode.value = playerName;
+        }
+        );
+    }
+
+    window.onload = () => {
+        playerName = sessionStorage.getItem('playerName');
+        if (!playerName || playerName.length < 4) {
+            setPlayerName(`Player${Math.floor(Math.random() * 1000000)}`);
+        }
+    };
+</script>
+</body>
+</html>

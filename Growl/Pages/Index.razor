@@ -1,0 +1,65 @@
+﻿@page "/"
+@using Growl.Models
+@using Growl.Services
+
+@inject NavigationManager NavigationManager
+@inject GameService GameService
+
+<div class="content">
+    <div class="row">
+        <h1>Growl</h1>
+    </div>
+    
+    <div class="row">
+        <p>Based on Growl by Vigour Games. <a href="https://joeyvigour.com/growl/">Official Website</a></p>
+    </div>
+    
+    <div class="row">
+        <div class="col-xl-3 col-md-2 col-sm-1"></div>
+        <div class="col-xl-6 col-md-8 col-sm-10">
+            <div class="card">
+                <div class="card-body">
+                    <EditForm Model="@joinGameModel" OnValidSubmit="@HandleValidJoinGameSubmit">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary />
+
+                        <div class="row">
+                            <div class="col-sm-3">
+                                <label for="gameCode">Game code</label>
+                            </div>
+                            <div class="col-sm-6">
+                                <InputText @bind-Value="joinGameModel.GameCode" class="form-control" id="gameCode"/>
+                            </div>
+                            <div class="col-sm-3">
+                                <button type="submit" class="btn btn-primary btn-block">Join</button>
+                            </div>
+                        </div>
+                    </EditForm>
+                    <div class="dropdown-divider"></div>
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <button class="btn btn-primary btn-block" @onclick="StartNewGame">Start new game</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code
+{
+    private JoinGameModel joinGameModel = new();
+
+    private void HandleValidJoinGameSubmit()
+    {
+        NavigationManager.NavigateTo($"/game/{joinGameModel.GameCode}");
+    }
+
+    private void StartNewGame()
+    {
+        var gameCode = GameService.CreateNewGame();
+
+        NavigationManager.NavigateTo($"/game/{gameCode}");
+    }
+}

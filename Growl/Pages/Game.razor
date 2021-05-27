@@ -1,0 +1,101 @@
+﻿@page "/game/{gameCode}"
+@using Growl.Services
+@using Blazored.SessionStorage
+@using System.ComponentModel.DataAnnotations
+@using Func
+
+@inject ISessionStorageService SessionStorage
+@inject GameService GameService
+@inject IJSRuntime JsRuntime
+
+<h3>Game @GameCode</h3>
+
+<h3>Player name: <span class="player-name"></span> <button class="btn btn-link"><span class="oi oi-pencil" onclick="showPlayerNameModal()"></span></button></h3>
+
+<ul class="list-group">
+    <li class="list-group-item font-weight-bold">Players</li>
+    @foreach (var player in GameService.GetPlayers(GameCode))
+    {
+        <li class="list-group-item">@player</li>
+    }
+</ul>
+
+<div class="modal" id="playerNameModal" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Enter your name</h5>
+            </div>
+            <EditForm Model="@playerNameModel" OnValidSubmit="SetPlayerName">
+                <div class="modal-body">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+
+                    <label for="name">Display name</label>
+                    <InputText @bind-Value="playerNameModel.Name" class="form-control" id="playerName" />
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Ok</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string GameCode { get; set; }
+
+    private PlayerNameModel playerNameModel = new();
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        GameService.OnGameStateUpdated += async (gameCode, state) =>
+        {
+            if (gameCode != GameCode) return;
+
+            await InvokeAsync(StateHasChanged);
+        };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);
+
+        await JsRuntime.InvokeVoidAsync("applyPlayerNameToNodes");
+    }
+
+    private async Task SetPlayerName()
+    {
+        await JsRuntime.InvokeVoidAsync("setPlayerName", playerNameModel.Name);
+        await JsRuntime.InvokeVoidAsync("hidePlayerNameModal");
+
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    private void ReplacePlayerInGame(string playerName, string previousPlayerName)
+    {
+        if (GameService.HasPlayer(GameCode, previousPlayerName))
+        {
+
+        }
+        else
+        {
+            switch(GameService.AddPlayer(GameCode, playerName))
+            {
+                case Failure<TooManyPlayersError> _: throw new Exception("Too many players already in game");
+            };
+        }
+    }
+
+    private class PlayerNameModel
+    {
+        [Required]
+        [StringLength(20, MinimumLength = 4, ErrorMessage = "Name must be between 4 and 20 characters long")]
+        [RegularExpression(@"^[a-zA-Z0-9!$£#\.\-\(\)&$]+( [a-zA-Z0-9!$£#\.\-\(\)&$]+)*$", ErrorMessage = "Name contains invalid characters")]
+        public string Name { get; set; }
+    }
+}
