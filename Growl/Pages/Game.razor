@@ -14,43 +14,31 @@
     return;
 }
 
-<h3>Game @GameCode</h3>
+<div class="content">
+    <h3>Game @GameCode</h3>
 
-<h3>Player name: <span class="player-name"></span> <button class="btn btn-link"><span class="oi oi-pencil" onclick="showPlayerNameModal()"></span></button></h3>
-<h2>@(SessionId is Some<Guid> v ? v.Value : Guid.Empty)</h2>
-<ul class="list-group">
-    <li class="list-group-item font-weight-bold">Players</li>
-    @foreach (var player in _gameRunner.GetPlayers())
-    {
-        <li class="list-group-item">@player</li>
-    }
-</ul>
+    <EditForm class="form-inline" Model="@playerNameModel" OnValidSubmit="JoinGame">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
 
-<div class="modal" id="playerNameModal" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Enter your name</h5>
-            </div>
-            <EditForm Model="@playerNameModel" OnValidSubmit="SetPlayerName">
-                <div class="modal-body">
-                    <DataAnnotationsValidator />
-                    <ValidationSummary />
+        <label for="playerName">Player name</label>
+        <InputText @bind-Value="playerNameModel.Name" class="form-control" id="playerName" readonly=@HasJoinedGame />
+        <button type="submit" class="btn btn-primary" disabled=@HasJoinedGame>Join</button>
+    </EditForm>
 
-                    <label for="name">Display name</label>
-                    <InputText @bind-Value="playerNameModel.Name" class="form-control" id="playerName" />
-                </div>
-                <div class="modal-footer">
-                    <button type="submit" class="btn btn-primary">Ok</button>
-                </div>
-            </EditForm>
-        </div>
-    </div>
+    <ul class="list-group">
+        <li class="list-group-item font-weight-bold">Players</li>
+        @foreach (var player in _gameRunner.GetPlayers())
+        {
+            <li class="list-group-item">@player</li>
+        }
+    </ul>
 </div>
-
 @code {
     [Parameter]
     public string GameCode { get; set; }
+
+    private bool HasJoinedGame => SessionId is Some<Guid> id && _gameRunner.HasPlayer(id.Value);
 
     private GameRunner _gameRunner;
 
@@ -78,8 +66,6 @@
     {
         await base.OnAfterRenderAsync(firstRender);
 
-        await JsRuntime.InvokeVoidAsync("applyPlayerNameToNodes");
-
         if (SessionId is None)
         {
             var sessionId = await SessionStorage.GetItemAsync<Guid?>("sessionId");
@@ -92,30 +78,24 @@
             SessionId = Option.Some(sessionId.Value);
             StateHasChanged();
         }
+
+        var sessionIdValue = SessionId is Some<Guid> s ? s.Value : throw new Exception("Unexpected error: SessionId is not set");
+
+        if (string.IsNullOrWhiteSpace(playerNameModel.Name))
+        {
+            playerNameModel.Name = _gameRunner.GetPlayerName(sessionIdValue) is Some<string> n ? n.Value : await JsRuntime.InvokeAsync<string>("getPlayerName");
+            StateHasChanged();
+        }
     }
 
-    private async Task SetPlayerName()
+    private async Task JoinGame()
     {
         await JsRuntime.InvokeVoidAsync("setPlayerName", playerNameModel.Name);
-        await JsRuntime.InvokeVoidAsync("hidePlayerNameModal");
+
+        var sessionIdValue = SessionId is Some<Guid> s ? s.Value : throw new Exception("Could not join game because session ID is not set");
+        _gameRunner.AddPlayer(sessionIdValue, playerNameModel.Name);
 
         StateHasChanged();
-    }
-
-    [JSInvokable]
-    private void ReplacePlayerInGame(string playerName, string previousPlayerName)
-    {
-        if (_gameRunner.HasPlayer(previousPlayerName))
-        {
-
-        }
-        else
-        {
-            switch(_gameRunner.AddPlayer(SessionId is Some<Guid> s ? s.Value : throw new Exception("Session ID not found"), playerName))
-            {
-                case Failure<TooManyPlayersError> _: throw new Exception("Too many players already in game");
-            };
-        }
     }
 
     private class PlayerNameModel

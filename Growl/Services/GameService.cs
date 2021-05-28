@@ -26,7 +26,7 @@
         }
 
         public Option<GameRunner> GetGame(string gameCode) =>
-            _games.TryGetValue(gameCode, out var runner)
+            _games.TryGetValue(gameCode.ToUpperInvariant(), out var runner)
                 ? Some(runner)
                 : None<GameRunner>();
 
@@ -49,20 +49,4 @@
                 .ToArray()
                 .Map(x => new string(x));
     }
-
-    public class TooManyPlayersError : ResultError { }
-    public class PlayerNotFoundError : ResultError { }
-
-    public record GameState(
-        DateTime CreationDate,
-        GameStatus Status,
-        IEnumerable<string> PlayerNames);
-
-    public enum GameStatus
-    {
-        Lobby,
-        Running,
-        Finished,
-    }
-
 }
