@@ -1,0 +1,77 @@
+﻿@using Growl.Services
+@using Func
+@using System.ComponentModel.DataAnnotations
+
+@inject IJSRuntime JsRuntime
+
+<div class="row">
+    <h3>Game code: @GameCode</h3>
+</div>
+
+<div class="row">
+    <EditForm class="form-inline" Model="_playerNameModel" OnValidSubmit="JoinGame">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <label for="playerName">Player name</label>
+        <InputText @bind-Value="_playerNameModel.Name" class="form-control" id="playerName" readonly=@HasJoinedGame />
+        <button type="submit" class="btn btn-primary" disabled=@HasJoinedGame>Join</button>
+    </EditForm>
+</div>
+
+<div class="row justify-content-end">
+    <button type="button" class="btn btn-primary" @onclick="OnStartGame" disabled=@(GameRunner.Status == GameStatus.Lobby && GameRunner.GetPlayers().Count() < 4)>Start</button>
+</div>
+<ul class="list-group">
+    <li class="list-group-item font-weight-bold">Players</li>
+    @foreach (var player in GameRunner.GetPlayers())
+    {
+        <li class="list-group-item">@player</li>
+    }
+</ul>
+
+@code {
+    private bool HasJoinedGame => GameRunner.HasPlayer(SessionId);
+
+    private PlayerNameModel _playerNameModel = new();
+
+    [Parameter]
+    public EventCallback OnStartGame { get; set; }
+
+    [Parameter]
+    public Guid SessionId { get; set; }
+
+    [Parameter]
+    public string GameCode { get; set; }
+
+    [Parameter]
+    public GameRunner GameRunner { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);
+
+        if (string.IsNullOrWhiteSpace(_playerNameModel.Name))
+        {
+            _playerNameModel.Name = GameRunner.GetPlayerName(SessionId) is Some<string> n ? n.Value : await JsRuntime.InvokeAsync<string>("getPlayerName");
+            StateHasChanged();
+        }
+    }
+
+    private async Task JoinGame()
+    {
+        await JsRuntime.InvokeVoidAsync("setPlayerName", _playerNameModel.Name);
+
+        GameRunner.AddPlayer(SessionId, _playerNameModel.Name);
+
+        StateHasChanged();
+    }
+
+    private class PlayerNameModel
+    {
+        [Required]
+        [StringLength(20, MinimumLength = 4, ErrorMessage = "Name must be between 4 and 20 characters long")]
+        [RegularExpression(@"^[a-zA-Z0-9!$£#\.\-\(\)&$]+( [a-zA-Z0-9!$£#\.\-\(\)&$]+)*$", ErrorMessage = "Name contains invalid characters")]
+        public string Name { get; set; }
+    }
+}

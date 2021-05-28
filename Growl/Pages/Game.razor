@@ -1,12 +1,10 @@
 ﻿@page "/game/{gameCode}"
 @using Growl.Services
 @using Blazored.SessionStorage
-@using System.ComponentModel.DataAnnotations
 @using Func
 
 @inject ISessionStorageService SessionStorage
 @inject GameService GameService
-@inject IJSRuntime JsRuntime
 @inject SessionService SessionService;
 
 @if (SessionId is None)
@@ -15,36 +13,19 @@
 }
 
 <div class="content">
-    <h3>Game @GameCode</h3>
-
-    <EditForm class="form-inline" Model="@playerNameModel" OnValidSubmit="JoinGame">
-        <DataAnnotationsValidator />
-        <ValidationSummary />
-
-        <label for="playerName">Player name</label>
-        <InputText @bind-Value="playerNameModel.Name" class="form-control" id="playerName" readonly=@HasJoinedGame />
-        <button type="submit" class="btn btn-primary" disabled=@HasJoinedGame>Join</button>
-    </EditForm>
-
-    <ul class="list-group">
-        <li class="list-group-item font-weight-bold">Players</li>
-        @foreach (var player in _gameRunner.GetPlayers())
-        {
-            <li class="list-group-item">@player</li>
-        }
-    </ul>
+    @if (_gameRunner.Status == GameStatus.Lobby)
+    {
+        <Growl.Controls.Lobby GameCode="GameCode" OnStartGame="StartGame" GameRunner="_gameRunner" SessionId="@Require(SessionId)" />
+    }
 </div>
 @code {
     [Parameter]
     public string GameCode { get; set; }
 
-    private bool HasJoinedGame => SessionId is Some<Guid> id && _gameRunner.HasPlayer(id.Value);
 
     private GameRunner _gameRunner;
 
     public Option<Guid> SessionId { get; set; } = Option.None<Guid>();
-
-    private PlayerNameModel playerNameModel = new();
 
     protected override void OnInitialized()
     {
@@ -56,7 +37,7 @@
             _ => throw new Exception("Game hasn't been started")
         };
 
-        _gameRunner.OnGameStateUpdated += async state =>
+        _gameRunner.OnGameStateUpdated += async _ =>
         {
             await InvokeAsync(StateHasChanged);
         };
@@ -78,31 +59,15 @@
             SessionId = Option.Some(sessionId.Value);
             StateHasChanged();
         }
-
-        var sessionIdValue = SessionId is Some<Guid> s ? s.Value : throw new Exception("Unexpected error: SessionId is not set");
-
-        if (string.IsNullOrWhiteSpace(playerNameModel.Name))
-        {
-            playerNameModel.Name = _gameRunner.GetPlayerName(sessionIdValue) is Some<string> n ? n.Value : await JsRuntime.InvokeAsync<string>("getPlayerName");
-            StateHasChanged();
-        }
     }
 
-    private async Task JoinGame()
+    private void StartGame()
     {
-        await JsRuntime.InvokeVoidAsync("setPlayerName", playerNameModel.Name);
-
-        var sessionIdValue = SessionId is Some<Guid> s ? s.Value : throw new Exception("Could not join game because session ID is not set");
-        _gameRunner.AddPlayer(sessionIdValue, playerNameModel.Name);
+        _gameRunner.StartGame();
 
         StateHasChanged();
     }
 
-    private class PlayerNameModel
-    {
-        [Required]
-        [StringLength(20, MinimumLength = 4, ErrorMessage = "Name must be between 4 and 20 characters long")]
-        [RegularExpression(@"^[a-zA-Z0-9!$£#\.\-\(\)&$]+( [a-zA-Z0-9!$£#\.\-\(\)&$]+)*$", ErrorMessage = "Name contains invalid characters")]
-        public string Name { get; set; }
-    }
+    private TValue Require<TValue>(Option<TValue> value) =>
+        value is Some<TValue> v ? v.Value : throw new Exception("Required value was not set");
 }
