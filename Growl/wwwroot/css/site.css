@@ -30,6 +30,10 @@ a, .btn-link {
     color: red;
 }
 
+.card-img-cache {
+    display: none;
+}
+
 #blazor-error-ui {
     background: lightyellow;
     bottom: 0;
@@ -48,3 +52,4 @@ a, .btn-link {
         right: 0.75rem;
         top: 0.5rem;
     }
+

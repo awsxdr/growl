@@ -20,11 +20,11 @@
 </div>
 
 <div class="row justify-content-end">
-    <button type="button" class="btn btn-primary" @onclick="OnStartGame" disabled=@(GameRunner.Status == GameStatus.Lobby && GameRunner.GetPlayers().Count() < 4)>Start</button>
+    <button type="button" class="btn btn-primary" @onclick="OnStartGame" disabled=@(GameRunner.Status == GameStatus.Lobby && GameRunner.GetPlayerNames().Count() < 4)>Start</button>
 </div>
 <ul class="list-group">
     <li class="list-group-item font-weight-bold">Players</li>
-    @foreach (var player in GameRunner.GetPlayers())
+    @foreach (var player in GameRunner.GetPlayerNames())
     {
         <li class="list-group-item">@player</li>
     }

@@ -6,7 +6,8 @@
     public record GameState(
         DateTime CreationDate,
         GameStatus Status,
-        IEnumerable<string> PlayerNames,
+        IEnumerable<PlayerState> Players,
+        IEnumerable<ICard> Deck,
         int CurrentPlayer = 0);
 
     public enum GameStatus

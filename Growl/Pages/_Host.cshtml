@@ -1,4 +1,5 @@
 ﻿@page "/"
+@using System.IO
 @using Growl.Services
 @namespace Growl.Pages
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
@@ -20,16 +21,21 @@
 <body>
     <component type="typeof(App)" render-mode="ServerPrerendered" />
 
-    <div id="blazor-error-ui">
-        <environment include="Staging,Production">
-            An error has occurred. This application may no longer respond until reloaded.
-        </environment>
-        <environment include="Development">
-            An unhandled exception has occurred. See browser dev tools for details.
-        </environment>
-        <a href="" class="reload">Reload</a>
-        <a class="dismiss">🗙</a>
-    </div>
+<div id="blazor-error-ui">
+    <environment include="Staging,Production">
+        An error has occurred. This application may no longer respond until reloaded.
+    </environment>
+    <environment include="Development">
+        An unhandled exception has occurred. See browser dev tools for details.
+    </environment>
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>
+
+@foreach (var file in Directory.GetFiles("wwwroot/img/", "*.png")) // Cache card images
+{
+    <img src="@($"img/{System.IO.Path.GetFileName(file)}")" class="card-img-cache"/>
+}
 
 <script src="_framework/blazor.server.js"></script>
 <script src="js/jquery-3.6.0.min.js"></script>
@@ -58,6 +64,7 @@
             .find(x => x[0] === key) || ['',''])[1];
 
     const getRandomPlayerName = () =>
-        `Player${Math.floor(Math.random() * 1000000)}`;</script>
+        `Player${Math.floor(Math.random() * 1000000)}`;
+</script>
 </body>
 </html>

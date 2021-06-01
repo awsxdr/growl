@@ -1,7 +1,6 @@
 ﻿namespace Growl.Services
 {
     using System;
-    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Linq;
     using Func;
@@ -10,8 +9,8 @@
 
     public class GameRunner
     {
-        private GameState _gameState = new(DateTime.UtcNow, GameStatus.Lobby, Array.Empty<string>());
-        private ConcurrentDictionary<Guid, string> _playerNames = new();
+        private GameState _gameState = new(DateTime.UtcNow, GameStatus.Lobby, Array.Empty<PlayerState>(), Array.Empty<ICard>());
+        private readonly object _gameStateLock = new();
 
         private static readonly IReadOnlyDictionary<int, (int GoldCount, int BiteCount)> InfectionDeckCounts =
             new Dictionary<int, (int GoldCount, int BiteCount)>
@@ -41,26 +40,32 @@
             || _gameState.Status == GameStatus.Finished;
 
         public bool HasPlayer(Guid sessionId) =>
-            _playerNames.ContainsKey(sessionId);
+            _gameState.Players.Any(x => x.SessionId == sessionId);
 
-        public IEnumerable<string> GetPlayers() => _playerNames.Values;
+        public IEnumerable<string> GetPlayerNames() =>
+            _gameState.Players.Select(x => x.Name);
 
         public Result AddPlayer(Guid sessionId, string playerName)
         {
-            if (_playerNames.Any(x => x.Value.Equals(playerName, StringComparison.InvariantCultureIgnoreCase)))
-            {
+            if (GetPlayerNames().Any(x => x.Equals(playerName, StringComparison.InvariantCultureIgnoreCase)))
                 return Fail<NameTakenError>();
-            }
 
-            _playerNames.AddOrUpdate(sessionId, playerName, (_, _) => playerName);
-
-            if (_playerNames.Count > 10)
+            lock (_gameStateLock)
             {
-                _playerNames.Remove(sessionId, out _);
-                return Fail<TooManyPlayersError>();
-            }
+                var newPlayerCollection =
+                    _gameState.Players
+                        .Where(x => x.SessionId != sessionId)
+                        .Append(new PlayerState(sessionId, playerName, Allegiance.Human, Array.Empty<ICard>()))
+                        .ToArray();
 
-            _gameState = _gameState with {PlayerNames = _playerNames.Values};
+                if (newPlayerCollection.Length > 10)
+                    return Fail<TooManyPlayersError>();
+
+                _gameState = _gameState with
+                {
+                    Players = newPlayerCollection,
+                };
+            }
 
             OnGameStateUpdated?.Invoke(_gameState);
 
@@ -69,34 +74,89 @@
 
         public Result SetPlayerName(Guid sessionId, string playerName)
         {
-            if (_playerNames.ContainsKey(sessionId))
+            var player =
+                _gameState.Players
+                    .SingleOrDefault(x => x.SessionId == sessionId);
+
+            if(player == default)
                 return Fail<PlayerNotFoundError>();
 
-            _playerNames[sessionId] = playerName;
+            player = player with {Name = playerName};
+
+            lock (_gameStateLock)
+            {
+                _gameState = _gameState with
+                {
+                    Players = _gameState.Players
+                        .Where(x => x.SessionId != sessionId)
+                        .Append(player),
+                };
+            }
 
             return Succeed();
         }
 
-        public Option<string> GetPlayerName(Guid sessionId) =>
-            _playerNames.TryGetValue(sessionId, out var name)
-                ? Some(name)
+        public Option<string> GetPlayerName(Guid sessionId)
+        {
+            var player = _gameState.Players.Where(x => x.SessionId == sessionId).ToArray();
+
+            return player.Any()
+                ? Some(player.Single().Name)
                 : None<string>();
+        }
 
         public Result StartGame()
         {
-            if (_gameState.Status != GameStatus.Lobby)
-                return Fail<GameAlreadyStartedError>();
-                
-            _gameState = _gameState with
+            lock (_gameStateLock)
             {
-                Status = GameStatus.Running,
-                CurrentPlayer = new Random().Next(0, _gameState.PlayerNames.Count())
-            };
+                if (_gameState.Status != GameStatus.Lobby)
+                    return Fail<GameAlreadyStartedError>();
+
+                var (goldCount, biteCount) = InfectionDeckCounts[_gameState.Players.Count()];
+                var infectionDeck = CreateDeck(goldCount: goldCount, biteCount: biteCount);
+
+                var (newPlayerCollection, _) = infectionDeck.Deal(_gameState.Players, 1);
+
+                newPlayerCollection = newPlayerCollection
+                    .Select(x =>
+                        x.Hand.First() is BiteCard
+                            ? x with {Allegiance = Allegiance.Werewolf}
+                            : x);
+
+                var remainingDeck = (_gameState.Players.Count() switch
+                {
+                    var n when n < 6 => CreateDeck(goldCount: 12 - goldCount, biteCount: 12 - biteCount, charmCount: 5, woundCount: 8, salveCount: 5),
+                    var n when n < 9 => CreateDeck(goldCount: 12 - goldCount, biteCount: 16 - biteCount, charmCount: 5, woundCount: 12, salveCount: 5),
+                    _ => CreateDeck(goldCount: 12 - goldCount, biteCount: 20 - biteCount, charmCount: 5, woundCount: 16, salveCount: 5),
+                }).Shuffle();
+                
+                (newPlayerCollection, remainingDeck) = remainingDeck.Deal(newPlayerCollection, 3);
+
+                // Ensure no-one starts with 3 wound cards
+                int playersWith3WoundsCount;
+                while ((playersWith3WoundsCount = newPlayerCollection.Count(x => x.Hand.Count(c => c is WoundCard) == 3)) > 0)
+                {
+                    newPlayerCollection = newPlayerCollection.Select(x =>
+                        x.Hand.Count(c => c is WoundCard) == 3 ? x with {Hand = x.Hand.Take(1)} : x);
+
+                    remainingDeck = remainingDeck.Concat(CreateMultiple<WoundCard>(playersWith3WoundsCount * 3)).Shuffle();
+
+                    (newPlayerCollection, remainingDeck) = remainingDeck.DealToMaximum(newPlayerCollection, 3, 4);
+                }
+
+                // Convert any humans with 3 bites into werewolves
+                newPlayerCollection = newPlayerCollection.Select(x => x.Hand.Count(c => c is BiteCard) >= 3 ? x with {Allegiance = Allegiance.Werewolf} : x);
+
+                _gameState = _gameState with
+                {
+                    Status = GameStatus.Running,
+                    CurrentPlayer = new Random().Next(0, _gameState.Players.Count()),
+                    Players = newPlayerCollection,
+                    Deck = remainingDeck,
+                };
+            }
 
             OnGameStateUpdated?.Invoke(_gameState);
-
-            var (goldCount, biteCount) = InfectionDeckCounts[_gameState.PlayerNames.Count()];
-            var infectionDeck = CreateDeck(goldCount: goldCount, biteCount: biteCount);
 
             return Succeed();
         }
