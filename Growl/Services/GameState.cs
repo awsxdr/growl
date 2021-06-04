@@ -13,7 +13,9 @@
     public enum GameStatus
     {
         Lobby,
-        Running,
+        Sniff,
+        Day,
+        Night,
         Finished,
     }
 }

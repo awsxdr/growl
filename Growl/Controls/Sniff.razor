@@ -1,0 +1,51 @@
+﻿@using System.Threading
+@using Func
+@using Growl.Services
+
+<div class="row">
+    <div class="col-md-3 col-lg-4"></div>
+    <div class="col-md-6 col-lg-4">
+        <div class="card sniff-card">
+            <CardImage Card="@(_playerAllegiance switch { Allegiance.Werewolf => new BiteCard(), _ => new GoldCard()})" Class="card-img-top" />
+            <div class="card-body">
+                <h5 class="card-title">@(_playerAllegiance switch { Allegiance.Werewolf => "Werewolf", _ => "Human" })</h5>
+                <p class="card-text">
+                    @(_playerAllegiance switch 
+                    {
+                        Allegiance.Werewolf => "Attempt to convert or kill the players before the end of the 3rd night",
+                        _ => "Attempt to survive and/or kill the werewolves before the end of the 3rd night"
+                    })
+                </p>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+
+@code {
+    [Parameter]
+    public Guid SessionId { get; set; }
+
+    [Parameter]
+    public GameRunner GameRunner { get; set; }
+
+    [Parameter]
+    public EventCallback OnSniffCompleted { get; set; }
+
+    private Allegiance _playerAllegiance;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+
+        _playerAllegiance = GameRunner.GetPlayer(SessionId) is Some<PlayerState> p ? p.Value.Allegiance : throw new Exception("Player is not in game");
+
+        _ = new Timer(_ => SniffCompleted().Wait(), null, TimeSpan.FromSeconds(5), Timeout.InfiniteTimeSpan);
+    }
+
+    private async Task SniffCompleted()
+    {
+        await InvokeAsync(OnSniffCompleted.InvokeAsync);
+    }
+}

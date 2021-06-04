@@ -34,6 +34,35 @@ a, .btn-link {
     display: none;
 }
 
+.sniff-card {
+    max-width: 600px;
+}
+
+.current-card {
+    width: 100%;
+    max-width: 400px;
+}
+
+.deck-container {
+    height: 10%;
+    background: #ffffff;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+    .deck-container img {
+        height: 10%;
+    }
+
+    .deck-container ul {
+        width: 100%;
+    }
+
+    .deck-container li {
+        padding: 0;
+    }
+
+
 #blazor-error-ui {
     background: lightyellow;
     bottom: 0;

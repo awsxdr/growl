@@ -1,6 +1,7 @@
 ﻿namespace Growl.Services
 {
     using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Linq;
     using Func;
@@ -11,6 +12,7 @@
     {
         private GameState _gameState = new(DateTime.UtcNow, GameStatus.Lobby, Array.Empty<PlayerState>(), Array.Empty<ICard>());
         private readonly object _gameStateLock = new();
+        private readonly ConcurrentDictionary<Guid, PlayerService> _playerServices = new();
 
         private static readonly IReadOnlyDictionary<int, (int GoldCount, int BiteCount)> InfectionDeckCounts =
             new Dictionary<int, (int GoldCount, int BiteCount)>
@@ -24,8 +26,26 @@
                 [10] = (7, 3),
             };
 
+        private static T Construct<T>(Type type) =>
+            (T) type.GetConstructor(Array.Empty<Type>())?.Invoke(Array.Empty<object>());
+
+        private static readonly IReadOnlyCollection<INightCard> NightCards =
+            typeof(INightCard).Assembly
+                .GetImplementationsOf<INightCard>()
+                .Where(x => !x.IsAssignableTo(typeof(IFinalNightCard)))
+                .Select(Construct<INightCard>)
+                .ToArray();
+
+        private static readonly IReadOnlyCollection<IFinalNightCard> FinalNightCards =
+            typeof(IFinalNightCard).Assembly
+                .GetImplementationsOf<IFinalNightCard>()
+                .Select(Construct<IFinalNightCard>)
+                .ToArray();
+
         public string GameCode { get; }
         public GameStatus Status => _gameState.Status;
+        public Guid CurrentPlayer => _gameState.Players.ElementAt(_gameState.CurrentPlayer).SessionId;
+        public ICard TopDeckCard => _gameState.Deck.First();
 
         public delegate void GameStateUpdatedEvent(GameState state);
         public event GameStateUpdatedEvent OnGameStateUpdated;
@@ -42,12 +62,12 @@
         public bool HasPlayer(Guid sessionId) =>
             _gameState.Players.Any(x => x.SessionId == sessionId);
 
-        public IEnumerable<string> GetPlayerNames() =>
-            _gameState.Players.Select(x => x.Name);
+        public IEnumerable<PlayerState> GetPlayers() =>
+            _gameState.Players;
 
         public Result AddPlayer(Guid sessionId, string playerName)
         {
-            if (GetPlayerNames().Any(x => x.Equals(playerName, StringComparison.InvariantCultureIgnoreCase)))
+            if (GetPlayers().Any(x => x.Name.Equals(playerName, StringComparison.InvariantCultureIgnoreCase)))
                 return Fail<NameTakenError>();
 
             lock (_gameStateLock)
@@ -72,38 +92,32 @@
             return Succeed();
         }
 
-        public Result SetPlayerName(Guid sessionId, string playerName)
+        public void SetStatus(GameStatus status)
         {
-            var player =
-                _gameState.Players
-                    .SingleOrDefault(x => x.SessionId == sessionId);
-
-            if(player == default)
-                return Fail<PlayerNotFoundError>();
-
-            player = player with {Name = playerName};
-
-            lock (_gameStateLock)
+            _gameState = _gameState with
             {
-                _gameState = _gameState with
-                {
-                    Players = _gameState.Players
-                        .Where(x => x.SessionId != sessionId)
-                        .Append(player),
-                };
-            }
+                Status = status
+            };
 
-            return Succeed();
+            OnGameStateUpdated?.Invoke(_gameState);
         }
 
-        public Option<string> GetPlayerName(Guid sessionId)
+        public Option<PlayerState> GetPlayer(Guid sessionId)
         {
             var player = _gameState.Players.Where(x => x.SessionId == sessionId).ToArray();
 
             return player.Any()
-                ? Some(player.Single().Name)
-                : None<string>();
+                ? Some(player.Single())
+                : None<PlayerState>();
         }
+
+        public PlayerService GetPlayerService(Guid sessionId) =>
+            GetPlayer(sessionId) is Some
+                ? _playerServices.GetOrAdd(sessionId, CreatePlayerService)
+                : throw new Exception("Player does not exist in game");
+
+        private PlayerService CreatePlayerService(Guid sessionId) =>
+            new(this, sessionId);
 
         public Result StartGame()
         {
@@ -120,7 +134,7 @@
                 newPlayerCollection = newPlayerCollection
                     .Select(x =>
                         x.Hand.First() is BiteCard
-                            ? x with {Allegiance = Allegiance.Werewolf}
+                            ? x with {Allegiance = Allegiance.Werewolf, IsAlphaWolf = true}
                             : x);
 
                 var remainingDeck = (_gameState.Players.Count() switch
@@ -131,27 +145,53 @@
                 }).Shuffle();
                 
                 (newPlayerCollection, remainingDeck) = remainingDeck.Deal(newPlayerCollection, 3);
+                newPlayerCollection = newPlayerCollection.ToArray();
 
                 // Ensure no-one starts with 3 wound cards
                 int playersWith3WoundsCount;
                 while ((playersWith3WoundsCount = newPlayerCollection.Count(x => x.Hand.Count(c => c is WoundCard) == 3)) > 0)
                 {
-                    newPlayerCollection = newPlayerCollection.Select(x =>
-                        x.Hand.Count(c => c is WoundCard) == 3 ? x with {Hand = x.Hand.Take(1)} : x);
+                    newPlayerCollection = newPlayerCollection
+                        .Select(x => x.Hand.Count(c => c is WoundCard) == 3 ? x with {Hand = x.Hand.Take(1)} : x)
+                        .ToArray();
 
                     remainingDeck = remainingDeck.Concat(CreateMultiple<WoundCard>(playersWith3WoundsCount * 3)).Shuffle();
 
                     (newPlayerCollection, remainingDeck) = remainingDeck.DealToMaximum(newPlayerCollection, 3, 4);
                 }
 
+                remainingDeck = remainingDeck.ToArray();
+
+                var random = new Random();
+                var firstNightCardIndex = random.Next(-3, 4) + remainingDeck.Count() / 3;
+                var secondNightCardIndex = random.Next(-3, 4) + (remainingDeck.Count() / 3) * 2;
+
+                var selectedNightCards = NightCards.Shuffle().Take(2).ToArray();
+                
+                remainingDeck =
+                    remainingDeck.Take(firstNightCardIndex)
+                        .Enqueue(selectedNightCards[0])
+                        .Enqueue(remainingDeck.TakeBetween(firstNightCardIndex, secondNightCardIndex))
+                        .Enqueue(selectedNightCards[1])
+                        .Enqueue(remainingDeck.Skip(secondNightCardIndex))
+                        .Enqueue(FinalNightCards.Shuffle().First());
+
                 // Convert any humans with 3 bites into werewolves
-                newPlayerCollection = newPlayerCollection.Select(x => x.Hand.Count(c => c is BiteCard) >= 3 ? x with {Allegiance = Allegiance.Werewolf} : x);
+                newPlayerCollection = newPlayerCollection
+                    .Select(x => x.Hand.Count(c => c is BiteCard) >= 3 
+                        ? x with 
+                        {
+                            Allegiance = Allegiance.Werewolf,
+                            IsAlphaWolf = true,
+                        }
+                        : x)
+                    .ToArray();
 
                 _gameState = _gameState with
                 {
-                    Status = GameStatus.Running,
-                    CurrentPlayer = new Random().Next(0, _gameState.Players.Count()),
-                    Players = newPlayerCollection,
+                    Status = GameStatus.Sniff,
+                    CurrentPlayer = 0,
+                    Players = newPlayerCollection.Shuffle().ToArray(),
                     Deck = remainingDeck,
                 };
             }
@@ -161,10 +201,10 @@
             return Succeed();
         }
 
-        private IEnumerable<TItem> CreateMultiple<TItem>(int count) where TItem : new() =>
+        private static IEnumerable<TItem> CreateMultiple<TItem>(int count) where TItem : new() =>
             Enumerable.Repeat(0, count).Select(_ => new TItem());
 
-        private IEnumerable<ICard> CreateDeck(
+        private static IEnumerable<ICard> CreateDeck(
             int goldCount = 0,
             int biteCount = 0, 
             int charmCount = 0, 
@@ -177,6 +217,66 @@
                 .Concat(CreateMultiple<WoundCard>(woundCount))
                 .Concat(CreateMultiple<SalveCard>(salveCount))
                 .Shuffle();
+
+        public void GiveTopCardToPlayer(PlayerState player)
+        {
+            var deck = _gameState.Deck.Dequeue(out var card).ToArray();
+
+            var newHand = player.Hand.Append(card).ToArray();
+
+            var playerIsAlive = 
+                player.IsAlive 
+                && newHand.OfType<WoundCard>().Count() - newHand.OfType<SalveCard>().Count() < 3;
+
+            var playerIsWerewolf =
+                player.Allegiance == Allegiance.Werewolf
+                || newHand.OfType<BiteCard>().Count() - newHand.OfType<CharmCard>().Count() >= 3;
+
+            var players = ModifyPlayer(player.SessionId, p => p with
+            {
+                Hand = newHand,
+                Allegiance = playerIsWerewolf ? Allegiance.Werewolf : Allegiance.Human,
+                IsAlive = playerIsAlive,
+            }).ToArray();
+
+            if (players.Count(p => p.IsAlive) <= 2)
+            {
+                throw new Exception("Game over");
+                //TODO: Handle game over condition
+            }
+
+            var nextPlayerIndex =
+                players
+                    .Select((p, i) => (Index: i, Player: p))
+                    .ToArray()
+                    .Map(x => x
+                        .Skip(_gameState.CurrentPlayer + 1)
+                        .Concat(x.Take(_gameState.CurrentPlayer + 1)))
+                    .First(x => x.Player.IsAlive)
+                    .Index;
+
+            var status =
+                deck[0] is INightCard
+                    ? GameStatus.Night
+                    : GameStatus.Day;
+
+            _gameState = _gameState with
+            {
+                Deck = deck,
+                CurrentPlayer = nextPlayerIndex,
+                Players = players,
+                Status = status,
+            };
+
+            OnGameStateUpdated?.Invoke(_gameState);
+        }
+
+        private IEnumerable<PlayerState> ModifyPlayer(Guid sessionId, Func<PlayerState, PlayerState> modifier) =>
+            _gameState.Players.Select(player =>
+                player.SessionId == sessionId
+                    ? modifier(player)
+                    : player)
+                .ToArray();
     }
 
     public class TooManyPlayersError : ResultError { }

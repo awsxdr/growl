@@ -1,0 +1,56 @@
+﻿@using Growl.Services
+@using Func
+<h3>Night</h3>
+
+<div class="row">
+    <div class="order-12 order-sm-0 col-sm-6 col-md-4 col-lg-3">
+        <ul class="list-group">
+            @foreach (var player in GameRunner.GetPlayers())
+            {
+                <li class="list-group-item">
+                    <span class="align-middle">
+                        @player.Name
+                        @(_playerCount >= 8 && CurrentPlayerState.IsAlphaWolf && player.IsAlphaWolf ? " 🐺" : "")
+                        @(player.IsAlive ? "" : " ☠")
+                        @(GameRunner.CurrentPlayer == player.SessionId ? " ⭐" : "")
+                    </span>
+                </li>
+            }
+        </ul>
+    </div>
+    <div class="order-1 col-12 col-sm-6">
+        <CardImage Card="@GameRunner.TopDeckCard" Class="current-card" />
+    </div>
+</div>
+<nav class="nav fixed-bottom navbar-light deck-container">
+    <div class="row">
+        <span>Allegiance: @(CurrentPlayerState.Allegiance switch { Allegiance.Human => "Humans", _ => "Werewolves" })</span>
+    </div>
+    <div class="row">
+        <ul class="list-group list-group-horizontal">
+            @foreach (var card in CurrentPlayerState.Hand)
+            {
+                <li class="list-group-item">
+                    <CardImage Card="@card" />
+                </li>
+            }
+        </ul>
+    </div>
+</nav>
+@code {
+    [Parameter]
+    public Guid SessionId { get; set; }
+
+    [Parameter]
+    public GameRunner GameRunner { get; set; }
+
+    private PlayerState CurrentPlayerState => GameRunner.GetPlayer(SessionId) is Some<PlayerState> p ? p.Value : throw new Exception("Player not found");
+    private int _playerCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+
+        _playerCount = GameRunner.GetPlayers().Count();
+    }
+}

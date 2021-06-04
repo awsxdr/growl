@@ -9,65 +9,89 @@
 
 @if (SessionId is None)
 {
+    <div class="spinner-border">
+        <span class="sr-only">Loading...</span>
+    </div>
     return;
 }
 
 <div class="content">
-    @if (_gameRunner.Status == GameStatus.Lobby)
+    @switch (_gameRunner.Status)
     {
-        <Growl.Controls.Lobby GameCode="GameCode" OnStartGame="StartGame" GameRunner="_gameRunner" SessionId="@Require(SessionId)" />
+        case GameStatus.Lobby:
+            <Growl.Controls.Lobby GameCode="@GameCode" OnStartGame="StartGame" GameRunner="_gameRunner" SessionId="@Require(SessionId)" />
+            break;
+
+        case GameStatus.Sniff:
+            <Growl.Controls.Sniff OnSniffCompleted="HandleSniffCompleted" GameRunner="_gameRunner" SessionId="@Require(SessionId)" />
+            break;
+
+        case GameStatus.Day:
+            <Growl.Controls.Day GameRunner="_gameRunner" SessionId="@Require(SessionId)" />
+            break;
+
+        case GameStatus.Night:
+            <Growl.Controls.Night GameRunner="_gameRunner" SessionId="@Require(SessionId)" />
+            break;
     }
 </div>
 @code {
     [Parameter]
     public string GameCode { get; set; }
 
-
     private GameRunner _gameRunner;
 
-    public Option<Guid> SessionId { get; set; } = Option.None<Guid>();
+        public Option<Guid> SessionId { get; set; } = Option.None<Guid>();
 
-    protected override void OnInitialized()
-    {
-        base.OnInitialized();
-
-        _gameRunner = GameService.GetGame(GameCode) switch
+        protected override void OnInitialized()
         {
-            Some<GameRunner> r => r.Value,
-            _ => throw new Exception("Game hasn't been started")
-        };
+            base.OnInitialized();
 
-        _gameRunner.OnGameStateUpdated += async _ =>
-        {
-            await InvokeAsync(StateHasChanged);
-        };
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        await base.OnAfterRenderAsync(firstRender);
-
-        if (SessionId is None)
-        {
-            var sessionId = await SessionStorage.GetItemAsync<Guid?>("sessionId");
-            if (sessionId == null)
+            _gameRunner = GameService.GetGame(GameCode) switch
             {
-                sessionId = SessionService.GetOrInitSessionId();
-                await SessionStorage.SetItemAsync("sessionId", sessionId);
-            }
+                Some<GameRunner> r => r.Value,
+                _ => throw new Exception("Game hasn't been started")
+            };
 
-            SessionId = Option.Some(sessionId.Value);
+            _gameRunner.OnGameStateUpdated += async _ =>
+            {
+                await InvokeAsync(StateHasChanged);
+            };
+        }
+
+        protected override async Task OnAfterRenderAsync(bool firstRender)
+        {
+            await base.OnAfterRenderAsync(firstRender);
+
+            if (SessionId is None)
+            {
+                var sessionId = await SessionStorage.GetItemAsync<Guid?>("sessionId");
+                if (sessionId == null)
+                {
+                    sessionId = SessionService.GetOrInitSessionId();
+                    await SessionStorage.SetItemAsync("sessionId", sessionId);
+                }
+
+                SessionId = Option.Some(sessionId.Value);
+                StateHasChanged();
+            }
+        }
+
+        private void StartGame()
+        {
+            _gameRunner.StartGame();
+
             StateHasChanged();
         }
-    }
 
-    private void StartGame()
+        private TValue Require<TValue>(Option<TValue> value) =>
+            value is Some<TValue> v ? v.Value : throw new Exception("Required value was not set");
+
+    private async Task HandleSniffCompleted()
     {
-        _gameRunner.StartGame();
+        _gameRunner.SetStatus(GameStatus.Day);
 
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
     }
 
-    private TValue Require<TValue>(Option<TValue> value) =>
-        value is Some<TValue> v ? v.Value : throw new Exception("Required value was not set");
 }

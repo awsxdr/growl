@@ -51,5 +51,20 @@
                 enumeratedPlayers,
                 cardQueue);
         }
+
+        public static IEnumerable<TItem> Dequeue<TItem>(this IEnumerable<TItem> queue, out TItem item)
+        {
+            item = queue.First();
+            return queue.Skip(1);
+        }
+
+        public static IEnumerable<TItem> Enqueue<TItem>(this IEnumerable<TItem> queue, TItem item) =>
+            queue.Append(item);
+
+        public static IEnumerable<TItem> Enqueue<TItem>(this IEnumerable<TItem> queue, IEnumerable<TItem> items) =>
+            queue.Concat(items);
+
+        public static IEnumerable<TItem> TakeBetween<TItem>(this IEnumerable<TItem> enumerable, int startIndex, int endIndex) =>
+            enumerable.Skip(startIndex).Take(endIndex - startIndex);
     }
 }

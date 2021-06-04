@@ -28,7 +28,7 @@
                                 <label for="gameCode">Game code</label>
                             </div>
                             <div class="col-sm-6">
-                                <InputText @bind-Value="joinGameModel.GameCode" class="form-control" id="gameCode"/>
+                                <InputText @bind-Value="joinGameModel.GameCode" class="form-control" id="gameCode" />
                             </div>
                             <div class="col-sm-3">
                                 <button type="submit" class="btn btn-primary btn-block">Join</button>
@@ -39,6 +39,12 @@
                     <div class="row">
                         <div class="col-sm-12">
                             <button class="btn btn-primary btn-block" @onclick="StartNewGame">Start new game</button>
+                        </div>
+                    </div>
+                    <div class="dropdown-divider"></div>
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <button class="btn btn-primary btn-block" @onclick="StartTestGame">Start test game</button>
                         </div>
                     </div>
                 </div>
@@ -61,5 +67,17 @@
         var gameCode = GameService.CreateNewGame().GameCode;
 
         NavigationManager.NavigateTo($"/game/{gameCode}");
+    }
+
+    private void StartTestGame()
+    {
+        var gameRunner = GameService.CreateNewGame();
+
+        for (var i = 0; i < 9; ++i)
+        {
+            gameRunner.AddPlayer(Guid.NewGuid(), $"Player {i}");
+        }
+        
+        NavigationManager.NavigateTo($"/game/{gameRunner.GameCode}");
     }
 }
