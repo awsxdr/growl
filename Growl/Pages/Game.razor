@@ -111,18 +111,21 @@
         _gameRunner.PassCard(eventArgs.NextPlayerCard, sessionId, eventArgs.NextPlayerId);
         _gameRunner.PassCard(eventArgs.PreviousPlayerCard, sessionId, eventArgs.PreviousPlayerId);
 
-        if(_gameRunner.GetPlayers().All(p => p.HasSwapped))
+        if(_gameRunner.GetPlayers().All(p => p.HasSwapped || p.IsInCage || !p.IsAlive))
             _gameRunner.SetStatus(GameStatus.SwapReveal);
-            
+
         InvokeAsync(StateHasChanged).Wait();
     }
 
     private async Task HandleRevealCompleted()
     {
-        _gameRunner.CompleteCardPass();
-        _gameRunner.DiscardTopCard();
-        _gameRunner.SetStatus(GameStatus.Day);
+        if (_gameRunner.CurrentPlayer == Require(SessionId))
+        {
+            _gameRunner.CompleteCardPass();
+            _gameRunner.DiscardTopCard();
+            _gameRunner.SetStatus(GameStatus.Day);
 
-        await InvokeAsync(StateHasChanged);
+            await InvokeAsync(StateHasChanged);
+        }
     }
 }

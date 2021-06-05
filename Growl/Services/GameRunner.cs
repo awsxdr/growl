@@ -195,7 +195,7 @@
                     Status = GameStatus.Sniff,
                     CurrentPlayer = 0,
                     Players = newPlayerCollection.Shuffle().ToArray(),
-                    Deck = remainingDeck.Prepend(new BloodHoundNightCard()).Prepend(new GoldCard()),
+                    Deck = remainingDeck.Prepend(new CagedNightCard()).Prepend(new GoldCard()),
                 };
             }
 
@@ -335,7 +335,7 @@
             {
                 var players = (
                     from player in _gameState.Players
-                    let newHand = player.Hand.Concat(player.PassedCards.Select(c => c.Card).Shuffle()).ToArray()
+                    let newHand = player.Hand.Concat(player.PassedCards?.Select(c => c.Card).Shuffle() ?? Array.Empty<ICard>()).ToArray()
                     let playerIsAlive = player.IsAlive && newHand.OfType<WoundCard>().Count() - newHand.OfType<SalveCard>().Count() < 3
                     let playerIsWerewolf = player.Allegiance == Allegiance.Werewolf || newHand.OfType<BiteCard>().Count() - newHand.OfType<CharmCard>().Count() >= 3
                     select player with
@@ -345,6 +345,7 @@
                         HasSwapped = false,
                         Allegiance = playerIsWerewolf ? Allegiance.Werewolf : Allegiance.Human,
                         IsAlive = playerIsAlive,
+                        IsInCage = false,
                     }).ToArray();
 
                 var nextPlayerIndex =
@@ -367,16 +368,18 @@
             OnGameStateUpdated?.Invoke(_gameState);
         }
 
-        public PlayerState GetNextLivingPlayer(Guid fromPlayer) =>
+        public PlayerState GetNextLivingPlayer(Guid fromPlayer) => GetNextLivingPlayer(fromPlayer, _ => true);
+        public PlayerState GetNextLivingPlayer(Guid fromPlayer, Func<PlayerState, bool> additionalPredicate) =>
             _gameState.Players.SkipWhile(p => p.SessionId != fromPlayer)
                 .Skip(1)
-                .Concat(_gameState.Players.TakeWhile(p => p.SessionId != fromPlayer).Take(1))
-                .First(p => p.IsAlive);
+                .Concat(_gameState.Players.TakeWhile(p => p.SessionId != fromPlayer))
+                .First(p => p.IsAlive && additionalPredicate(p));
 
-        public PlayerState GetPreviousLivingPlayer(Guid fromPlayer) =>
+        public PlayerState GetPreviousLivingPlayer(Guid fromPlayer) => GetPreviousLivingPlayer(fromPlayer, _ => true);
+        public PlayerState GetPreviousLivingPlayer(Guid fromPlayer, Func<PlayerState, bool> additionalPredicate) =>
             _gameState.Players.TakeWhile(p => p.SessionId != fromPlayer).Reverse()
                 .Concat(_gameState.Players.SkipWhile(p => p.SessionId != fromPlayer).Reverse())
-                .First(p => p.IsAlive);
+                .First(p => p.IsAlive && additionalPredicate(p));
 
         private IEnumerable<PlayerState> ModifyPlayer(Guid sessionId, Func<PlayerState, PlayerState> modifier) =>
             ModifyPlayer(_gameState.Players, sessionId, modifier);
@@ -387,6 +390,19 @@
                         ? modifier(player)
                         : player)
                 .ToArray();
+
+        public void LockInCage(Guid playerId)
+        {
+            lock (_gameStateLock)
+            {
+                _gameState = _gameState with
+                {
+                    Players = ModifyPlayer(playerId, p => p with {IsInCage = true})
+                };
+            }
+
+            OnGameStateUpdated?.Invoke(_gameState);
+        }
     }
 
     public class TooManyPlayersError : ResultError { }

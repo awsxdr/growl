@@ -27,6 +27,10 @@
             case BloodHoundNightCard card:
                 <Growl.Controls.Nights.BloodHoundNight GameRunner="@GameRunner" SessionId="@SessionId" Card="@card" OnNightResolved="@NightCompleted" />
                 break;
+
+            case CagedNightCard _:
+                <Growl.Controls.Nights.CagedNight GameRunner="@GameRunner" SessionId="@SessionId" OnNightResolved="@NightCompleted" />
+                break;
         }
     </div>
 </div>

@@ -12,7 +12,8 @@
         bool IsAlphaWolf = false,
         int Coins = 0,
         IEnumerable<(ICard Card, Guid FromPlayer)> PassedCards = default,
-        bool HasSwapped = false);
+        bool HasSwapped = false,
+        bool IsInCage = false);
 
     public enum Allegiance
     {

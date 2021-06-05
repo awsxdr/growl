@@ -1,0 +1,46 @@
+﻿@using Growl.Services
+@using Func
+
+@if (GameRunner.CurrentPlayer == SessionId)
+{
+    <div class="row">
+        <h5>Select target</h5>
+    </div>
+    <div class="row">
+        <ul class="list-group col-12">
+            @foreach (var player in GameRunner.GetPlayers())
+            {
+                <li class="list-group-item">
+                    <span>@player.Name</span>
+                    <button class="btn btn-secondary float-right" @onclick="SelectPlayer(player.SessionId)">Lock in cage</button>
+                </li>
+            }
+        </ul>
+    </div>
+}
+else
+{
+    <div class="row">
+        <h5>@(GetPlayerName(GameRunner.CurrentPlayer)) is selecting a player to lock in a cage</h5>
+    </div>
+}
+@code {
+    [Parameter]
+    public Guid SessionId { get; set; }
+
+    [Parameter]
+    public GameRunner GameRunner { get; set; }
+
+    [Parameter]
+    public EventCallback OnNightResolved { get; set; }
+
+    private Func<Task> SelectPlayer(Guid playerId) => async () =>
+    {
+        GameRunner.LockInCage(playerId);
+
+        await OnNightResolved.InvokeAsync();
+    };
+
+    private string GetPlayerName(Guid playerId) =>
+        GameRunner.GetPlayer(playerId) is Some<PlayerState> p ? p.Value.Name : "Unknown";
+}

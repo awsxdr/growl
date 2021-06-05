@@ -2,34 +2,41 @@
 @using Func
 <h3>Night</h3>
 
-<div class="row">
-    @if (_hasSwapped)
-    {
-        <h5>Waiting for other players to select cards to swap</h5>
-    }
-    else
-    {
-        <button class="btn btn-primary float-right" disabled=@(_cardSendToPreviousPlayer < 0 || _cardSendToNextPlayer < 0) @onclick="SendCards">Send</button>
-    }
-</div>
-<div class="row">
-    @foreach (var card in _cards)
-    {
-        <div class="col-6 col-md-4 col-lg-3 col-xl-2">
-            <div class="card">
-                <CardImage Card="@card.Card" Class="card-img-top"/>
-                <div class="card-body">
-                    <button class="btn btn-secondary btn-block @(_cardSendToNextPlayer == card.Index ? "active" : "")" @onclick="@SelectCardForNextPlayer(card.Index)" disabled=@(_cardSendToPreviousPlayer == card.Index)>
-                        Send to @(NextPlayer.Name)
-                    </button>
-                    <button class="btn btn-secondary btn-block @(_cardSendToPreviousPlayer == card.Index ? "active" : "")" @onclick="@SelectCardForPreviousPlayer(card.Index)" disabled=@(_cardSendToNextPlayer == card.Index)>
-                        Send to @(PreviousPlayer.Name)
-                    </button>
+@if(CurrentPlayerState.IsAlive && !CurrentPlayerState.IsInCage)
+{ 
+    <div class="row">
+        @if (_hasSwapped)
+        {
+            <h5>Waiting for other players to exchange cards...</h5>
+        }
+        else
+        {
+            <button class="btn btn-primary float-right" disabled=@(_cardSendToPreviousPlayer < 0 || _cardSendToNextPlayer < 0) @onclick="SendCards">Send</button>
+        }
+    </div>
+    <div class="row">
+        @foreach (var card in _cards)
+        {
+            <div class="col-6 col-md-4 col-lg-3 col-xl-2">
+                <div class="card">
+                    <CardImage Card="@card.Card" Class="card-img-top"/>
+                    <div class="card-body">
+                        <button class="btn btn-secondary btn-block @(_cardSendToNextPlayer == card.Index ? "active" : "")" @onclick="@SelectCardForNextPlayer(card.Index)" disabled=@(_cardSendToPreviousPlayer == card.Index)>
+                            Send to @(_nextPlayer.Name)
+                        </button>
+                        <button class="btn btn-secondary btn-block @(_cardSendToPreviousPlayer == card.Index ? "active" : "")" @onclick="@SelectCardForPreviousPlayer(card.Index)" disabled=@(_cardSendToNextPlayer == card.Index)>
+                            Send to @(_previousPlayer.Name)
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
-    }
-</div>
+        }
+    </div>
+}
+else
+{
+    <h5>Waiting for players to exchange cards...</h5>
+}
 
 @code {
     [Parameter]
@@ -46,8 +53,8 @@
     private PlayerState CurrentPlayerState => GameRunner.GetPlayer(SessionId) is Some<PlayerState> p ? p.Value : throw new Exception("Player not found");
     private int _playerCount;
 
-    private PlayerState PreviousPlayer => GameRunner.GetPreviousLivingPlayer(SessionId);
-    private PlayerState NextPlayer => GameRunner.GetNextLivingPlayer(SessionId);
+    private PlayerState _previousPlayer;
+    private PlayerState _nextPlayer;
 
     private int _cardSendToPreviousPlayer = -1;
     private int _cardSendToNextPlayer = -1;
@@ -58,6 +65,9 @@
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
+
+        _previousPlayer = GameRunner.GetPreviousLivingPlayer(SessionId, p => !p.IsInCage);
+        _nextPlayer = GameRunner.GetNextLivingPlayer(SessionId, p => !p.IsInCage);
 
         _cards = CurrentPlayerState.Hand
             .Where(c => CurrentPlayerState.Allegiance == Allegiance.Werewolf || !(c is BiteCard))
@@ -87,8 +97,8 @@
 
         OnCardsSent.Invoke(this, new CardsSentEventArgs(
             _cards[_cardSendToPreviousPlayer].Card,
-            PreviousPlayer.SessionId,
+            _previousPlayer.SessionId,
             _cards[_cardSendToNextPlayer].Card,
-            NextPlayer.SessionId));
+            _nextPlayer.SessionId));
     }
 }
