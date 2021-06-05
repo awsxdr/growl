@@ -94,10 +94,13 @@
 
         public void SetStatus(GameStatus status)
         {
-            _gameState = _gameState with
+            lock (_gameStateLock)
             {
-                Status = status
-            };
+                _gameState = _gameState with
+                {
+                    Status = status
+                };
+            }
 
             OnGameStateUpdated?.Invoke(_gameState);
         }
@@ -192,7 +195,7 @@
                     Status = GameStatus.Sniff,
                     CurrentPlayer = 0,
                     Players = newPlayerCollection.Shuffle().ToArray(),
-                    Deck = remainingDeck,
+                    Deck = remainingDeck.Prepend(new BloodHoundNightCard()).Prepend(new GoldCard()),
                 };
             }
 
@@ -217,6 +220,19 @@
                 .Concat(CreateMultiple<WoundCard>(woundCount))
                 .Concat(CreateMultiple<SalveCard>(salveCount))
                 .Shuffle();
+
+        public void DiscardTopCard()
+        {
+            lock (_gameStateLock)
+            {
+                _gameState = _gameState with
+                {
+                    Deck = _gameState.Deck.Dequeue(out _),
+                };
+            }
+
+            OnGameStateUpdated?.Invoke(_gameState);
+        }
 
         public void GiveTopCardToPlayer(PlayerState player)
         {
@@ -260,22 +276,116 @@
                     ? GameStatus.Night
                     : GameStatus.Day;
 
-            _gameState = _gameState with
+            lock (_gameStateLock)
             {
-                Deck = deck,
-                CurrentPlayer = nextPlayerIndex,
-                Players = players,
-                Status = status,
-            };
+                _gameState = _gameState with
+                {
+                    Deck = deck,
+                    CurrentPlayer = nextPlayerIndex,
+                    Players = players,
+                    Status = status,
+                };
+            }
 
             OnGameStateUpdated?.Invoke(_gameState);
         }
 
+        public void PassCard(ICard card, Guid fromPlayer, Guid toPlayer)
+        {
+            lock (_gameStateLock)
+            {
+                var players = ModifyPlayer(toPlayer, p => p with
+                {
+                    PassedCards = (p.PassedCards ?? Array.Empty<(ICard, Guid)>()).Append((card, fromPlayer)),
+                });
+
+                players = ModifyPlayer(players, fromPlayer, p => p with
+                {
+                    Hand = p.Hand
+                        .TakeWhile(c => c.GetType() != card.GetType())
+                        .Concat(p.Hand
+                            .SkipWhile(c => c.GetType() != card.GetType())
+                            .Skip(1))
+                        .ToArray(),
+                });
+
+                _gameState = _gameState with
+                {
+                    Players = players.ToArray(),
+                };
+            }
+
+            OnGameStateUpdated?.Invoke(_gameState);
+        }
+
+        public void SetHasPassed(Guid playerId)
+        {
+            lock (_gameStateLock)
+            {
+                _gameState = _gameState with
+                {
+                    Players = ModifyPlayer(playerId, p => p with {HasSwapped = true}),
+                };
+            }
+        }
+
+        public void CompleteCardPass()
+        {
+            lock (_gameStateLock)
+            {
+                var players = (
+                    from player in _gameState.Players
+                    let newHand = player.Hand.Concat(player.PassedCards.Select(c => c.Card).Shuffle()).ToArray()
+                    let playerIsAlive = player.IsAlive && newHand.OfType<WoundCard>().Count() - newHand.OfType<SalveCard>().Count() < 3
+                    let playerIsWerewolf = player.Allegiance == Allegiance.Werewolf || newHand.OfType<BiteCard>().Count() - newHand.OfType<CharmCard>().Count() >= 3
+                    select player with
+                    {
+                        Hand = newHand,
+                        PassedCards = Array.Empty<(ICard, Guid)>(),
+                        HasSwapped = false,
+                        Allegiance = playerIsWerewolf ? Allegiance.Werewolf : Allegiance.Human,
+                        IsAlive = playerIsAlive,
+                    }).ToArray();
+
+                var nextPlayerIndex =
+                    players
+                        .Select((p, i) => (Index: i, Player: p))
+                        .ToArray()
+                        .Map(x => x
+                            .Skip(_gameState.CurrentPlayer + 1)
+                            .Concat(x.Take(_gameState.CurrentPlayer + 1)))
+                        .First(x => x.Player.IsAlive)
+                        .Index;
+
+                _gameState = _gameState with
+                {
+                    Players = players,
+                    CurrentPlayer = nextPlayerIndex,
+                };
+            }
+
+            OnGameStateUpdated?.Invoke(_gameState);
+        }
+
+        public PlayerState GetNextLivingPlayer(Guid fromPlayer) =>
+            _gameState.Players.SkipWhile(p => p.SessionId != fromPlayer)
+                .Skip(1)
+                .Concat(_gameState.Players.TakeWhile(p => p.SessionId != fromPlayer).Take(1))
+                .First(p => p.IsAlive);
+
+        public PlayerState GetPreviousLivingPlayer(Guid fromPlayer) =>
+            _gameState.Players.TakeWhile(p => p.SessionId != fromPlayer).Reverse()
+                .Concat(_gameState.Players.SkipWhile(p => p.SessionId != fromPlayer).Reverse())
+                .First(p => p.IsAlive);
+
         private IEnumerable<PlayerState> ModifyPlayer(Guid sessionId, Func<PlayerState, PlayerState> modifier) =>
-            _gameState.Players.Select(player =>
-                player.SessionId == sessionId
-                    ? modifier(player)
-                    : player)
+            ModifyPlayer(_gameState.Players, sessionId, modifier);
+
+        private static IEnumerable<PlayerState> ModifyPlayer(IEnumerable<PlayerState> players, Guid sessionId, Func<PlayerState, PlayerState> modifier) =>
+            players.Select(player =>
+                    player.SessionId == sessionId
+                        ? modifier(player)
+                        : player)
                 .ToArray();
     }
 

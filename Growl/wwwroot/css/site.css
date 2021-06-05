@@ -16,6 +16,7 @@ a, .btn-link {
 
 .content {
     padding-top: 1.1rem;
+    padding-bottom: 20vh;
 }
 
 .valid.modified:not([type=checkbox]) {
@@ -35,7 +36,8 @@ a, .btn-link {
 }
 
 .sniff-card {
-    max-width: 600px;
+    max-width: 400px;
+    max-height: 80%;
 }
 
 .current-card {
@@ -44,7 +46,7 @@ a, .btn-link {
 }
 
 .deck-container {
-    height: 10%;
+    height: 20vh;
     background: #ffffff;
     overflow-x: auto;
     overflow-y: hidden;

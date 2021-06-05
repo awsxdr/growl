@@ -10,7 +10,9 @@
         IEnumerable<ICard> Hand,
         bool IsAlive = true,
         bool IsAlphaWolf = false,
-        int Coins = 0);
+        int Coins = 0,
+        IEnumerable<(ICard Card, Guid FromPlayer)> PassedCards = default,
+        bool HasSwapped = false);
 
     public enum Allegiance
     {

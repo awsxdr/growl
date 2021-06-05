@@ -1,15 +1,32 @@
 ﻿namespace Growl.Services
 {
+    using System;
+    using Func;
+
     public interface ICard
     {
         string ImageFileName { get; }
     }
 
+    public delegate void NightCardStateChangedEvent();
+
     public interface INightCard : ICard
     {
+        event NightCardStateChangedEvent OnStateChanged;
+    }
+
+    public abstract class NightCardBase : INightCard
+    {
+        public abstract string ImageFileName { get; }
+        public event NightCardStateChangedEvent OnStateChanged;
+        protected void StateHasChanged() => OnStateChanged?.Invoke();
     }
 
     public interface IFinalNightCard : INightCard
+    {
+    }
+
+    public abstract class FinalNightCardBase : NightCardBase, IFinalNightCard
     {
     }
 
@@ -38,83 +55,94 @@
         public string ImageFileName => "charm-card.png";
     }
 
-    public class BloodHoundNightCard : INightCard
+    public class BloodHoundNightCard : NightCardBase
     {
-        public string ImageFileName => "night-blood-hound-card.png";
+        public override string ImageFileName => "night-blood-hound-card.png";
+
+        private Option<Guid> _targetPlayer;
+        public Option<Guid> TargetPlayer
+        {
+            get => _targetPlayer;
+            set
+            {
+                _targetPlayer = value;
+                StateHasChanged();
+            }
+        }
     }
 
-    public class CagedNightCard : INightCard
+    public class CagedNightCard : NightCardBase
     {
-        public string ImageFileName => "night-caged-card.png";
+        public override string ImageFileName => "night-caged-card.png";
     }
 
-    public class HypnosisNightCard : INightCard
+    public class HypnosisNightCard : NightCardBase
     {
-        public string ImageFileName => "night-hypnosis-card.png";
+        public override string ImageFileName => "night-hypnosis-card.png";
     }
 
-    public class InsomniaNightCard : INightCard
+    public class InsomniaNightCard : NightCardBase
     {
-        public string ImageFileName => "night-insomnia-card.png";
+        public override string ImageFileName => "night-insomnia-card.png";
     }
 
-    public class SeanceNightCard : INightCard
+    public class SeanceNightCard : NightCardBase
     {
-        public string ImageFileName => "night-seance-card.png";
+        public override string ImageFileName => "night-seance-card.png";
     }
 
-    public class SilverBulletNightCard : INightCard
+    public class SilverBulletNightCard : NightCardBase
     {
-        public string ImageFileName => "night-silver-bullet-card.png";
+        public override string ImageFileName => "night-silver-bullet-card.png";
     }
 
-    public class TheGiftNightCard : INightCard
+    public class TheGiftNightCard : NightCardBase
     {
-        public string ImageFileName => "night-the-gift-card.png";
+        public override string ImageFileName => "night-the-gift-card.png";
     }
 
-    public class TruthSerumNightCard : INightCard
+    public class TruthSerumNightCard : NightCardBase
     {
-        public string ImageFileName => "night-truth-serum-card.png";
+        public override string ImageFileName => "night-truth-serum-card.png";
     }
 
-    public class AllHallowsEveFinalNightCard : IFinalNightCard
+    public class AllHallowsEveFinalNightCard : FinalNightCardBase
     {
-        public string ImageFileName => "final-night-all-hallows-eve.card.png";
+        public override string ImageFileName => "final-night-all-hallows-eve.card.png";
     }
 
-    public class TheAccusedFinalNightCard : IFinalNightCard
+    public class TheAccusedFinalNightCard : FinalNightCardBase
     {
-        public string ImageFileName => "final-night-the-accused-card.png";
+        public override string ImageFileName => "final-night-the-accused-card.png";
     }
 
-    public class ThePurgeFinalNightCard : IFinalNightCard
+    public class ThePurgeFinalNightCard : FinalNightCardBase
     {
-        public string ImageFileName => "final-night-the-purge-card.png";
+        public override string ImageFileName => "final-night-the-purge-card.png";
     }
 
-    public class TheSleepwalkersFinalNightCard : IFinalNightCard
+    public class TheSleepwalkersFinalNightCard : FinalNightCardBase
     {
-        public string ImageFileName => "final-night-the-sleepwalkers-card.png";
+        public override string ImageFileName => "final-night-the-sleepwalkers-card.png";
     }
 
-    public class TheTempestFinalNightCard : IFinalNightCard
+    public class TheTempestFinalNightCard : FinalNightCardBase
     {
-        public string ImageFileName => "final-night-the-tempest-card.png";
+        public override string ImageFileName => "final-night-the-tempest-card.png";
     }
 
-    public class TheTrustedFinalNightCard : IFinalNightCard
+    public class TheTrustedFinalNightCard : FinalNightCardBase
     {
-        public string ImageFileName => "final-night-the-trusted-card.png";
+        public override string ImageFileName => "final-night-the-trusted-card.png";
     }
 
-    public class TheUnsavedFinalNightCard : IFinalNightCard
+    public class TheUnsavedFinalNightCard : FinalNightCardBase
     {
-        public string ImageFileName => "final-night-the-unsaved-card.png";
+        public override string ImageFileName => "final-night-the-unsaved-card.png";
     }
 
-    public class TheUnwantedFinalNightCard : IFinalNightCard
+    public class TheUnwantedFinalNightCard : FinalNightCardBase
     {
-        public string ImageFileName => "final-night-the-unwanted-card.png";
+        public override string ImageFileName => "final-night-the-unwanted-card.png";
     }
 }

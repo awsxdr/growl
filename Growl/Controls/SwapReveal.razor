@@ -1,0 +1,38 @@
+﻿@using Growl.Services
+@using Func
+@using System.Threading
+<h5>You have received the following cards:</h5>
+
+<div class="row">
+    @foreach (var card in CurrentPlayerState.PassedCards)
+    {
+        <div class="col-6 col-md-4 col-lg-3 col-xl-2">
+            <CardImage Card="@card.Card" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid SessionId { get; set; }
+
+    [Parameter]
+    public GameRunner GameRunner { get; set; }
+
+    [Parameter]
+    public EventCallback OnRevealCompleted { get; set; }
+
+    private PlayerState CurrentPlayerState => GameRunner.GetPlayer(SessionId) is Some<PlayerState> p ? p.Value : throw new Exception("Player not found");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+
+        _ = new Timer(_ => RevealCompleted().Wait(), null, TimeSpan.FromSeconds(5), Timeout.InfiniteTimeSpan);
+    }
+
+    private async Task RevealCompleted()
+    {
+        await InvokeAsync(OnRevealCompleted.InvokeAsync);
+    }
+}

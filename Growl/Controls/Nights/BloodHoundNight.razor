@@ -1,0 +1,89 @@
+﻿@using Growl.Services
+@using Func
+
+@if (GameRunner.CurrentPlayer == SessionId)
+{
+    if (Card.TargetPlayer is Some<Guid> targetId)
+    {
+        var player = GameRunner.GetPlayer(targetId.Value) is Some<PlayerState> p ? p.Value : throw new Exception("Player not found!");
+
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title d-inline">@(GetPlayerName(targetId.Value))'s hand:</h5>
+                <button class="btn btn-primary float-right" @onclick="Proceed">Done</button>
+                <div class="row">
+                    @foreach (var card in player.Hand)
+                    {
+                        <div class="col-4 col-md-6 col-lg-4">
+                            <CardImage Card="card" Style="width: 100%; max-width: 300px"/>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            <h5>Select target</h5>
+        </div>
+        <div class="row">
+            <ul class="list-group col-12">
+                @foreach (var player in GameRunner.GetPlayers().Where(p => p.SessionId != SessionId))
+                {
+                    <li class="list-group-item">
+                        <span>@player.Name</span>
+                        <button class="btn btn-secondary float-right" @onclick="SelectPlayer(player.SessionId)">View hand</button>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+}
+else
+{
+    <div class="row">
+        @if (Card.TargetPlayer is Some<Guid> targetId)
+        {
+            <h5>@(GetPlayerName(GameRunner.CurrentPlayer)) is viewing @(GetPlayerName(targetId.Value))'s cards</h5>
+        }
+        else
+        {
+            <h5>@(GetPlayerName(GameRunner.CurrentPlayer)) is selecting a player to view the hand of</h5>
+        }
+    </div>
+}
+@code {
+    [Parameter]
+    public Guid SessionId { get; set; }
+
+    [Parameter]
+    public GameRunner GameRunner { get; set; }
+
+    [Parameter]
+    public BloodHoundNightCard Card { get; set; }
+
+    [Parameter]
+    public EventCallback OnNightResolved { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        Card.OnStateChanged += () => InvokeAsync(StateHasChanged).Wait();
+    }
+
+    private Action SelectPlayer(Guid playerId) => () =>
+    {
+        Card.TargetPlayer = Option.Some(playerId);
+    };
+
+    private async Task Proceed()
+    {
+        await OnNightResolved.InvokeAsync();
+    }
+
+    private string GetPlayerName(Guid playerId) =>
+        GameRunner.GetPlayer(playerId) is Some<PlayerState> p ? p.Value.Name : "Unknown";
+}

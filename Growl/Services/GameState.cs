@@ -8,7 +8,8 @@
         GameStatus Status,
         IEnumerable<PlayerState> Players,
         IEnumerable<ICard> Deck,
-        int CurrentPlayer = 0);
+        int CurrentPlayer = 0,
+        Guid NightTargetPlayer = default);
 
     public enum GameStatus
     {
@@ -16,6 +17,8 @@
         Sniff,
         Day,
         Night,
+        NightSwap,
+        SwapReveal,
         Finished,
     }
 }

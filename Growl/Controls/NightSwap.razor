@@ -1,0 +1,94 @@
+﻿@using Growl.Services
+@using Func
+<h3>Night</h3>
+
+<div class="row">
+    @if (_hasSwapped)
+    {
+        <h5>Waiting for other players to select cards to swap</h5>
+    }
+    else
+    {
+        <button class="btn btn-primary float-right" disabled=@(_cardSendToPreviousPlayer < 0 || _cardSendToNextPlayer < 0) @onclick="SendCards">Send</button>
+    }
+</div>
+<div class="row">
+    @foreach (var card in _cards)
+    {
+        <div class="col-6 col-md-4 col-lg-3 col-xl-2">
+            <div class="card">
+                <CardImage Card="@card.Card" Class="card-img-top"/>
+                <div class="card-body">
+                    <button class="btn btn-secondary btn-block @(_cardSendToNextPlayer == card.Index ? "active" : "")" @onclick="@SelectCardForNextPlayer(card.Index)" disabled=@(_cardSendToPreviousPlayer == card.Index)>
+                        Send to @(NextPlayer.Name)
+                    </button>
+                    <button class="btn btn-secondary btn-block @(_cardSendToPreviousPlayer == card.Index ? "active" : "")" @onclick="@SelectCardForPreviousPlayer(card.Index)" disabled=@(_cardSendToNextPlayer == card.Index)>
+                        Send to @(PreviousPlayer.Name)
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid SessionId { get; set; }
+
+    [Parameter]
+    public GameRunner GameRunner { get; set; }
+
+    [Parameter]
+    public EventHandler<CardsSentEventArgs> OnCardsSent { get; set; }
+
+    public record CardsSentEventArgs(ICard PreviousPlayerCard, Guid PreviousPlayerId, ICard NextPlayerCard, Guid NextPlayerId);
+
+    private PlayerState CurrentPlayerState => GameRunner.GetPlayer(SessionId) is Some<PlayerState> p ? p.Value : throw new Exception("Player not found");
+    private int _playerCount;
+
+    private PlayerState PreviousPlayer => GameRunner.GetPreviousLivingPlayer(SessionId);
+    private PlayerState NextPlayer => GameRunner.GetNextLivingPlayer(SessionId);
+
+    private int _cardSendToPreviousPlayer = -1;
+    private int _cardSendToNextPlayer = -1;
+    private bool _hasSwapped = false;
+
+    private (ICard Card, int Index)[] _cards;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+
+        _cards = CurrentPlayerState.Hand
+            .Where(c => CurrentPlayerState.Allegiance == Allegiance.Werewolf || !(c is BiteCard))
+            .Select((x, i) => (x, i))
+            .ToArray();
+
+        _playerCount = GameRunner.GetPlayers().Count();
+
+        (GameRunner.TopDeckCard as INightCard ?? throw new Exception("Card is not a night card")).OnStateChanged += () => InvokeAsync(StateHasChanged).Wait();
+    }
+
+    private Func<Task> SelectCardForNextPlayer(int cardIndex) => async () =>
+    {
+        _cardSendToNextPlayer = cardIndex;
+        await InvokeAsync(StateHasChanged);
+    };
+
+    private Func<Task> SelectCardForPreviousPlayer(int cardIndex) => async () =>
+    {
+        _cardSendToPreviousPlayer = cardIndex;
+        await InvokeAsync(StateHasChanged);
+    };
+
+    private void SendCards()
+    {
+        _hasSwapped = true;
+
+        OnCardsSent.Invoke(this, new CardsSentEventArgs(
+            _cards[_cardSendToPreviousPlayer].Card,
+            PreviousPlayer.SessionId,
+            _cards[_cardSendToNextPlayer].Card,
+            NextPlayer.SessionId));
+    }
+}

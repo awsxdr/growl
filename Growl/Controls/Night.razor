@@ -18,10 +18,19 @@
             }
         </ul>
     </div>
-    <div class="order-1 col-12 col-sm-6">
+    <div class="order-1 col-12 col-sm-6 col-md-4 col-lg-3">
         <CardImage Card="@GameRunner.TopDeckCard" Class="current-card" />
     </div>
+    <div class="order-2 order-sm-2 col-sm-12 col-md-4 col-lg-6 mb-1">
+        @switch (GameRunner.TopDeckCard)
+        {
+            case BloodHoundNightCard card:
+                <Growl.Controls.Nights.BloodHoundNight GameRunner="@GameRunner" SessionId="@SessionId" Card="@card" OnNightResolved="@NightCompleted" />
+                break;
+        }
+    </div>
 </div>
+
 <nav class="nav fixed-bottom navbar-light deck-container">
     <div class="row">
         <span>Allegiance: @(CurrentPlayerState.Allegiance switch { Allegiance.Human => "Humans", _ => "Werewolves" })</span>
@@ -52,5 +61,12 @@
         await base.OnInitializedAsync();
 
         _playerCount = GameRunner.GetPlayers().Count();
+
+        (GameRunner.TopDeckCard as INightCard ?? throw new Exception("Card is not a night card")).OnStateChanged += () => InvokeAsync(StateHasChanged).Wait();
+    }
+
+    private void NightCompleted()
+    {
+        GameRunner.SetStatus(GameStatus.NightSwap);
     }
 }
